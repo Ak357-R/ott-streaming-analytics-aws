@@ -1,48 +1,46 @@
-# OTT Streaming Analytics Platform on AWS
+# OTT Real-Time Processing Engine on AWS
 
 ![AWS](https://img.shields.io/badge/AWS-Cloud-orange)
-![Python](https://img.shields.io/badge/Python-3.8+-blue)
-![PySpark](https://img.shields.io/badge/PySpark-3.0+-red)
+![Python](https://img.shields.io/badge/Python-3.9+-blue)
+![Docker](https://img.shields.io/badge/Docker-Container-blue)
 ![Status](https://img.shields.io/badge/Status-Complete-green)
 
-A **production-style Data Engineering project** built entirely on AWS,
-demonstrating end-to-end data pipeline from raw data ingestion to
-business intelligence dashboards.
+> **Project 2** of the OTT Platform series.
+> Project 1 (Data Lake + Analytics): [ott-streaming-analytics-aws](https://github.com/Ak357-R/ott-streaming-analytics-aws)
+
+A **production-style real-time processing engine** built on AWS demonstrating serverless architecture, containerization, event-driven design, and microservices orchestration.
 
 ---
 
 ## Architecture
 
 ```
-Data Generation (Python)
-         |
-    S3 Raw Layer
-    (CSV / JSON)
-         |
-   AWS Glue ETL
-   (PySpark Jobs)
-         |
-  S3 Bronze Layer
-    (Parquet)
-         |
-   AWS Glue ETL
-   (PySpark Jobs)
-         |
-  S3 Silver Layer
-    (Parquet)
-         |
-   AWS Glue ETL
-   (PySpark Jobs)
-         |
-   S3 Gold Layer
-    (Parquet)
-         |
-  AWS Glue Data Catalog
-         |
-   Amazon Athena (SQL)
-         |
-  Power BI Dashboard
-  (Athena ODBC Connector)
+Client / Mobile App
+        |
+   HTTPS Request
+        ↓
+  API Gateway ──────────────────────────────────────┐
+        |                                            |
+   Lambda Proxy                               /health|
+        ↓                                            |
+  Lambda Function                                    |
+  (watch_event_processor)                            |
+        |              |                             |
+        |         DynamoDB                           |
+        |    (ott-user-engagement)                   |
+        ↓                                            |
+  SQS Queue                                          |
+        |                                            |
+  Lambda Trigger                                     |
+        ↓                                            |
+  Step Functions Pipeline                            |
+  ├── ValidateEvent (Lambda)                         |
+  ├── ScoreEngagement (Lambda)                       |
+  ├── Choice: HIGH/MEDIUM/LOW                        |
+  └── Route to action                                |
+                                                     |
+  EC2 / ECS Fargate ───────────────────────────────-┘
+  (Flask Recommendation API)
 ```
 
 ---
@@ -51,189 +49,184 @@ Data Generation (Python)
 
 | Category | Technology |
 |----------|-----------|
-| Cloud | Amazon Web Services (AWS) |
-| Storage | Amazon S3 |
-| ETL | AWS Glue + Apache Spark (PySpark) |
-| Catalog | AWS Glue Data Catalog |
-| Query Engine | Amazon Athena |
-| Orchestration | AWS Glue Workflows + EventBridge |
-| Monitoring | Amazon CloudWatch + SNS |
-| Dashboard | Power BI + Athena ODBC Connector |
-| Language | Python, PySpark, SQL |
-| Version Control | GitHub |
-
----
-
-## Data Pipeline — Medallion Architecture
-
-| Layer | Format | Records | Purpose |
-|-------|--------|---------|---------|
-| Raw | CSV / JSON | 121,000 | Original landing zone — never modified |
-| Bronze | Parquet | 121,000 | Cleaned, typed, deduped, metadata added |
-| Silver | Parquet | 100,000 | Joined across domains, business logic applied |
-| Gold | Parquet | ~500 | Pre-aggregated KPIs for dashboards |
-
----
-
-## Datasets
-
-| Dataset | Records | Format | Description |
-|---------|---------|--------|-------------|
-| users.csv | 10,000 | CSV | User profiles across 10 Indian regions |
-| subscriptions.csv | 10,000 | CSV | Subscription plans (free/basic/standard/premium) |
-| content_catalog.csv | 1,000 | CSV | Movies and series across 10 genres |
-| watch_events.json | 100,000 | JSON | Watch activity with device, quality, completion |
+| Compute | Amazon EC2 (t3.micro) |
+| Serverless | AWS Lambda (Python 3.12) |
+| Orchestration | AWS Step Functions |
+| Messaging | Amazon SQS |
+| API | Amazon API Gateway |
+| Database | Amazon DynamoDB |
+| Container Build | Docker |
+| Container Registry | Amazon ECR |
+| Container Deploy | Amazon ECS Fargate |
+| Monitoring | Amazon CloudWatch |
+| Security | AWS IAM (least privilege) |
 
 ---
 
 ## Project Structure
 
 ```
-ott-streaming-analytics-aws/
+ott-realtime-engine-aws/
 │
 ├── README.md
 │
-├── data_generation/
-│   └── generate_ott_data.py        # Generates all 4 datasets
+├── ec2/
+│   ├── recommendation_api.py    # Flask API (3 endpoints)
+│   └── ott-api.service          # systemd service file
 │
-├── scripts/
-│   ├── glue/
-│   │   ├── 01_raw_to_bronze.py     # Raw → Bronze ETL
-│   │   ├── 02_bronze_to_silver.py  # Bronze → Silver ETL
-│   │   ├── 03_silver_to_gold.py    # Silver → Gold ETL
-│   │   └── 04_data_quality.py      # 11 Data Quality Checks
-│   │
-│   └── sql/
-│       └── gold_analytics.sql      # Business Analytics Queries
+├── lambda/
+│   ├── watch_event_processor.py # Main processor + DynamoDB
+│   ├── validate_event.py        # Step Functions: State 1
+│   └── score_engagement.py      # Step Functions: State 2
+│
+├── step_functions/
+│   └── pipeline_definition.json # State machine (5 states)
+│
+├── docker/
+│   ├── Dockerfile               # Container definition
+│   └── requirements.txt         # Python dependencies
 │
 └── docs/
-    ├── architecture.md             # Architecture decisions
-    └── cost_analysis.md            # AWS cost breakdown
+    └── architecture.md          # Full architecture docs
 ```
 
 ---
 
-## Key Metrics Built
+## Services Built
 
-| Metric | Description |
-|--------|-------------|
-| DAU | Daily Active Users trend |
-| MAU | Monthly Active Users |
-| Revenue | By subscription plan and month |
-| Top Content | By watch hours and completion rate |
-| Device Share | Mobile vs Smart TV vs Desktop vs Laptop vs Tablet |
-| Genre Performance | Completion rates by genre |
-
----
-
-## Data Quality Framework
-
-**11 automated checks** across 3 tables:
-
-| Table | Check | Type |
-|-------|-------|------|
-| users | No NULL user_id | NULL check |
-| users | Age between 18-100 | Range check |
-| users | Email contains @ | Format check |
-| users | No duplicate user_ids | Duplicate check |
-| watch_events | watched_mins > 0 | Range check |
-| watch_events | completion_pct 0-100 | Range check |
-| watch_events | No NULL user_id | NULL check |
-| watch_events | No NULL content_id | NULL check |
-| subscriptions | amount_paid >= 0 | Range check |
-| subscriptions | Valid plan values | Business rule |
-| subscriptions | end_date > start_date | Logic check |
-
-Failed records are quarantined to:
-`s3://bucket/data_quality/failed_records/table/date/`
-
----
-
-## Pipeline Orchestration
-
-Automated daily pipeline via **AWS Glue Workflows**:
-
+### 1. EC2 Flask API
 ```
-1:00 AM Daily (Scheduled Trigger)
-         |
-Data Quality Checks
-         | (on success)
-Raw → Bronze ETL
-         | (on success)
-Bronze → Silver ETL
-         | (on success)
-Silver → Gold ETL
-         |
-Dashboard auto-refreshes
+Endpoint: http://51.20.56.215:5000
+Routes:
+  GET /health
+  GET /recommend?region=Karnataka&age=25
+  GET /stats
+
+Stack: Flask + Gunicorn (3 workers) + systemd
 ```
 
----
+### 2. Lambda Functions (3)
+```
+ott-watch-event-processor  → Main processor + DynamoDB save
+ott-validate-event         → Input validation for Step Functions
+ott-score-engagement       → Engagement scoring for Step Functions
+```
 
-## Monitoring & Alerts
+### 3. Step Functions Pipeline
+```
+5-state workflow:
+ValidateEvent → ScoreEngagement → Choice → Route → Success
 
-- **CloudWatch Alarms** on Glue job failures
-- **SNS Email Alerts** to data engineering team
-- **S3 Quality Reports** saved daily
-- **Glue Job Run History** for audit trail
+Branching:
+  HIGH   → SEND_BINGE_NOTIFICATION
+  MEDIUM → UPDATE_RECOMMENDATIONS
+  LOW    → LOG_AND_EXIT
+```
 
----
+### 4. SQS Queue
+```
+Queue: ott-watch-events-queue
+Trigger: Automatically invokes Lambda on new messages
+Pattern: Producer/Consumer decoupling
+```
 
-## Architecture Decision — Data Lakehouse
+### 5. API Gateway
+```
+API: ott-recommendation-api
+URL: https://ylsa3xb4c0.execute-api.eu-north-1.amazonaws.com/prod
+Routes: GET /recommend, GET /health
+```
 
-**Chose:** S3 + Athena (Lakehouse pattern)
-**Over:** Amazon Redshift (Traditional Warehouse)
+### 6. DynamoDB Table
+```
+Table: ott-user-engagement
+PK:    user_id (String)
+SK:    processed_at (String)
+Mode:  On-demand (auto-scales)
+```
 
-**Reasons:**
-- Serverless — zero cluster management
-- Pay per query — cost efficient
-- Modern pattern used by Uber, Airbnb, Databricks
-- Infinitely scalable
-- Same SQL interface as any warehouse
-
----
-
-## Dashboard — Power BI + Athena ODBC
-
-Connected **Power BI Desktop** to **Amazon Athena** via ODBC connector.
-Queries Gold layer Parquet files directly from S3.
-No data movement or duplication required.
-
-**Visuals built:**
-- DAU trend line chart
-- Revenue by plan bar chart
-- Device market share pie chart
-- Top content performance table
-- Monthly subscriber growth chart
-- Genre completion rate bar chart
-
----
-
-## AWS Cost Analysis
-
-| Service | Usage | Cost |
-|---------|-------|------|
-| Amazon S3 | ~35 MB stored | $0.001 |
-| AWS Glue ETL | 5 jobs × ~1.5 min | $0.090 |
-| AWS Glue Crawlers | 3 crawlers | $0.015 |
-| Amazon Athena | 10 queries | $0.002 |
-| CloudWatch | Basic monitoring | $0.000 |
-| SNS | Email alerts | $0.000 |
-| **Total** | **Complete project** | **~$0.11** |
-
-> Built using $100 AWS promotional credits. 99.9% of credits remaining.
+### 7. ECS Fargate
+```
+Cluster: ott-cluster
+Service: ott-recommendation-service
+Image:   ECR → ott-recommendation-api:latest
+CPU:     0.25 vCPU | Memory: 0.5 GB
+```
 
 ---
 
-## Interview Highlights
+## Live API Test
 
-- Built complete **Medallion Architecture** on AWS from scratch
-- Processed **121,000 records** through 4-layer pipeline
-- Implemented **11 data quality checks** with quarantine pattern
-- Automated pipeline with **event-driven orchestration**
-- Cross-tool integration: **AWS + Power BI**
-- Total cost: **$0.11** demonstrating cost optimization
-- Handled real production errors (duplicate columns, JSON arrays)
-- Made architecture decisions with documented reasoning
+```bash
+# Health check
+curl http://51.20.56.215:5000/health
+
+# Recommendations (EC2)
+curl "http://51.20.56.215:5000/recommend?region=Karnataka&age=25"
+
+# Engagement processing (API Gateway + Lambda + DynamoDB)
+curl "https://ylsa3xb4c0.execute-api.eu-north-1.amazonaws.com/prod/recommend?user_id=USR001234&content_id=CNT0571&completion_pct=85&watched_mins=127&device=smart_tv&region=Karnataka"
+```
+
+---
+
+## Sample Response
+
+```json
+{
+  "user_id": "USR001234",
+  "content_id": "CNT0571",
+  "completion_pct": 85.0,
+  "watched_mins": 127,
+  "device": "smart_tv",
+  "region": "Karnataka",
+  "engagement_level": "HIGH",
+  "is_binge_watcher": true,
+  "is_engaged": true,
+  "notifications": [
+    {
+      "type": "BINGE_WATCHER_BADGE",
+      "message": "User USR001234 earned Binge Watcher badge!"
+    },
+    {
+      "type": "LONG_SESSION",
+      "message": "User USR001234 watched 127 mins"
+    }
+  ],
+  "notification_count": 2,
+  "dynamodb_saved": true
+}
+```
+
+---
+
+## Key Architecture Decisions
+
+| Decision | Choice | Reason |
+|----------|--------|--------|
+| Event processing | Lambda | Serverless, auto-scales, pay per invocation |
+| Storage | DynamoDB | Millisecond writes, simple key-value pattern |
+| Buffering | SQS | Decouples producer/consumer, handles spikes |
+| Orchestration | Step Functions | Visual pipeline, built-in retry/error handling |
+| Containers | ECS Fargate | No server management, consistent environment |
+| Security | IAM Roles | Zero hardcoded credentials, least privilege |
+
+---
+
+## Cost Analysis
+
+```
+Total Project 2 AWS spend: ~$0.06
+
+EC2:           $0.00 (free tier)
+Lambda:        $0.00 (1M free requests/month)
+Step Functions:$0.00 (4000 free transitions/month)
+SQS:           $0.00 (1M free requests/month)
+API Gateway:   $0.00 (1M free requests/month)
+DynamoDB:      $0.00 (25GB free forever)
+ECR:           ~$0.05 (image storage)
+ECS Fargate:   ~$0.01 (30 min testing only)
+```
 
 ---
 
@@ -241,24 +234,61 @@ No data movement or duplication required.
 
 ### Prerequisites
 - AWS Account
-- Python 3.8+
-- Power BI Desktop
-- Simba Athena ODBC Driver
+- AWS CLI configured
+- Docker Desktop
+- Python 3.9+
 
-### Steps
-1. Clone this repository
-2. Run `data_generation/generate_ott_data.py`
-3. Upload files to S3 raw layer
-4. Create Glue IAM Role with S3 access
-5. Run Glue Crawler on raw layer
-6. Execute Glue jobs in order (01 → 04)
-7. Run Gold layer crawler
-8. Query with Athena
-9. Connect Power BI via ODBC
+### Deploy EC2 API
+```bash
+# Launch EC2 t3.micro (Amazon Linux 2023)
+# Connect via Session Manager
+sudo yum install python3-pip -y
+pip3 install flask gunicorn
+# Copy recommendation_api.py to instance
+sudo cp ott-api.service /etc/systemd/system/
+sudo systemctl enable ott-api
+sudo systemctl start ott-api
+```
+
+### Deploy Lambda Functions
+```bash
+# Create Lambda functions in AWS Console
+# Runtime: Python 3.12
+# Copy code from lambda/ folder
+# Attach IAM policies: SQSFullAccess + DynamoDBFullAccess
+```
+
+### Deploy Step Functions
+```bash
+# Create state machine in AWS Console
+# Copy step_functions/pipeline_definition.json
+# Replace Lambda ARNs with your actual ARNs
+```
+
+### Deploy ECS Fargate
+```bash
+# Build and push Docker image
+docker build -t ott-recommendation-api .
+aws ecr get-login-password --region eu-north-1 | \
+  docker login --username AWS --password-stdin \
+  700398842715.dkr.ecr.eu-north-1.amazonaws.com
+docker tag ott-recommendation-api:latest \
+  700398842715.dkr.ecr.eu-north-1.amazonaws.com/ott-recommendation-api:latest
+docker push \
+  700398842715.dkr.ecr.eu-north-1.amazonaws.com/ott-recommendation-api:latest
+# Create ECS cluster + task definition + service in console
+```
+
+---
+
+## Related Project
+
+**Project 1 — OTT Streaming Analytics Platform**
+Data Lake + ETL Pipeline + Analytics Dashboard
+[github.com/Ak357-R/ott-streaming-analytics-aws](https://github.com/Ak357-R/ott-streaming-analytics-aws)
 
 ---
 
 ## Author
-
-**Akash** | Data Engineering Portfolio Project
+**Akash** | AWS Cloud & Data Engineering Portfolio
 Built on AWS | June 2026
