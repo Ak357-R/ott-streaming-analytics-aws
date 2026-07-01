@@ -1,0 +1,121 @@
+{
+  "Comment": "OTT Watch Event Processing Pipeline - Step Functions State Machine",
+  "StartAt": "ValidateEvent",
+  "States": {
+    "ValidateEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "ott-validate-event",
+        "Payload.$": "$"
+      },
+      "ResultSelector": {
+        "body.$": "$.Payload"
+      },
+      "ResultPath": "$",
+      "Next": "ScoreEngagement",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ValidationFailed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ]
+    },
+
+    "ScoreEngagement": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "ott-score-engagement",
+        "Payload.$": "$.body"
+      },
+      "ResultSelector": {
+        "body.$": "$.Payload"
+      },
+      "ResultPath": "$",
+      "Next": "CheckEngagementLevel",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ProcessingFailed",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+
+    "CheckEngagementLevel": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.body.engagement_level",
+          "StringEquals": "HIGH",
+          "Next": "HighEngagementPath"
+        },
+        {
+          "Variable": "$.body.engagement_level",
+          "StringEquals": "MEDIUM",
+          "Next": "MediumEngagementPath"
+        }
+      ],
+      "Default": "LowEngagementPath"
+    },
+
+    "HighEngagementPath": {
+      "Type": "Pass",
+      "Parameters": {
+        "action": "SEND_BINGE_NOTIFICATION",
+        "message.$": "States.Format('Binge watcher detected: {}', $.body.user_id)",
+        "engagement_score.$": "$.body.engagement_score",
+        "data.$": "$.body"
+      },
+      "Next": "PipelineSuccess"
+    },
+
+    "MediumEngagementPath": {
+      "Type": "Pass",
+      "Parameters": {
+        "action": "UPDATE_RECOMMENDATIONS",
+        "message.$": "States.Format('Update recommendations for: {}', $.body.user_id)",
+        "engagement_score.$": "$.body.engagement_score",
+        "data.$": "$.body"
+      },
+      "Next": "PipelineSuccess"
+    },
+
+    "LowEngagementPath": {
+      "Type": "Pass",
+      "Parameters": {
+        "action": "LOG_AND_EXIT",
+        "message.$": "States.Format('Low engagement for: {}', $.body.user_id)",
+        "engagement_score.$": "$.body.engagement_score",
+        "data.$": "$.body"
+      },
+      "Next": "PipelineSuccess"
+    },
+
+    "ValidationFailed": {
+      "Type": "Fail",
+      "Error": "ValidationError",
+      "Cause": "Event failed validation checks"
+    },
+
+    "ProcessingFailed": {
+      "Type": "Fail",
+      "Error": "ProcessingError",
+      "Cause": "Engagement scoring failed"
+    },
+
+    "PipelineSuccess": {
+      "Type": "Succeed"
+    }
+  }
+}

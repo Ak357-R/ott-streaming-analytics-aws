@@ -1,0 +1,15 @@
+[Unit]
+Description=OTT Recommendation API
+After=network.target
+
+[Service]
+User=ec2-user
+WorkingDirectory=/home/ec2-user
+ExecStart=/home/ec2-user/.local/bin/gunicorn --workers 3 --bind 0.0.0.0:5000 recommendation_api:app
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
